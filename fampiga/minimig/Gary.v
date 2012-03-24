@@ -38,6 +38,9 @@
 // 2009-05-25	- ram, cpu and custom chips bus multiplexer
 // 2009-09-01	- fixed sel_kick
 // 2010-08-15	- clean-up
+//
+// AMR:
+// 2012-03-23  - Added select for Akiko
 
 module gary
 (
@@ -81,7 +84,8 @@ module gary
 	output 	sel_cia_b, 				//select cia B
 	output	sel_rtc,				//select $DCxxxx
 	output	sel_ide,				//select $DAxxxx
-	output	sel_gayle				//select $DExxxx
+	output	sel_gayle,				//select $DExxxx
+	output	sel_akiko			// select $B80000
 );
 
 wire	[2:0] t_sel_slow;
@@ -152,7 +156,7 @@ assign sel_gayle = (hdc_ena && cpu_address_in[23:12]==12'b1101_1110_0001) ? 1'b1
 
 assign sel_reg = (cpu_address_in[23:21]==3'b110) ? (~(sel_xram | sel_rtc | sel_ide | sel_gayle)) : 1'b0;		//chip registers at $DF0000 - $DFFFFF
 
-assign sel_cia = (cpu_address_in[23:16]==8'b1011_1111) ? 1'b1 : 1'b0;
+assign sel_cia = (cpu_address_in[23:16]==8'b1011_1111) ? 1'b1 : 1'b0; // $BFxxxx
 
 //cia a address decode
 assign sel_cia_a = (sel_cia & ~cpu_address_in[12]);
@@ -163,6 +167,8 @@ assign sel_cia_b = (sel_cia & ~cpu_address_in[13]);
 assign sel_boot = (cpu_address_in[23:12]==0 && boot) ? 1'b1 : 1'b0;
 
 assign sel_bank_1 = (cpu_address_in[23:21]==3'b001) ? 1'b1 : 1'b0;
+
+assign sel_akiko = (cpu_address_in[23:16]==8'b1011_1000) ? 1'b1 : 1'b0; // $B8xxxx
 
 //data bus slow down
 
