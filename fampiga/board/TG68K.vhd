@@ -22,6 +22,27 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- Annotations by Alastair M. Robinson, March 2012
+
+-- TG68K.vhd provides an interface between the core of the processor itself
+-- (TG68KdotC_Kernel) and the rest of the Minimig.
+
+-- The kernel is similar to a "real" 68000; it lacks a few key signals, such as
+-- the address strobe signal.  _dtack, and the Bus Request / Bus Grant signals are
+-- also missing.  Wait states or bus arbitration are instead handled by freezing
+-- the processor by pulling the clkena_in signal low.  (Similar to 68K Halt signal,
+-- but input-only.)
+
+-- TG68K is a wrapper that provides the missing logic signals needed by Minigmig,
+-- (i.e. _as, _dtack) and also provides a separate address/data bus for Fast RAM,
+-- a dtack signal for interfacing with the Minimig, and signals through which
+-- the Minimig can configure the CPU. 
+
+-- Also provided is AutoConfig data for the FastRAM expansion.
+
+
+-- FIXME - replace fast_sel with a more general zorro_sel signal
+
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -29,44 +50,56 @@ use ieee.std_logic_unsigned.all;
 
 entity TG68K is
    port(        
-		clk           : in std_logic;
+		clk           : in std_logic;	-- Sysclk - ~113MHz
 		reset         : in std_logic;
-        clkena_in     : in std_logic:='1';
-        IPL           : in std_logic_vector(2 downto 0):="111";
-        dtack         : in std_logic;
-        vpa           : in std_logic:='1';
-        ein           : in std_logic:='1';
+        clkena_in     : in std_logic:='1';  -- Tied high in Minimig design
+		  
+		  -- Standard MC68000 signals...
+		  
+        IPL           : in std_logic_vector(2 downto 0):="111";	-- Interrupt Priority Level - active low?
+        dtack         : in std_logic;	-- Data Transfer Acknowledge.  Low state indicates cycle finished.
+
+        vpa           : in std_logic:='1';  -- Valid Peripheral Address - Autovector, active low? Permamently high in Minimig design
+        ein           : in std_logic:='1';  -- Why do we need e as an input?  It's not bidir on real chip
+														  -- (Both tied to VCC in Minimig design)
+
         addr          : buffer std_logic_vector(31 downto 0);
         data_read  	  : in std_logic_vector(15 downto 0);
         data_write 	  : out std_logic_vector(15 downto 0);
-        as            : out std_logic;
-        uds           : out std_logic;
-        lds           : out std_logic;
-        rw            : out std_logic;
-        e             : out std_logic;
-        vma           : buffer std_logic:='1';
+        as            : out std_logic;	-- Address strobe, active low?
+        uds           : out std_logic; -- Upper data strobe, active low?
+        lds           : out std_logic; -- lower data strobe, active low?
+        rw            : out std_logic; -- 1 for Read, 0 for Write
+        e             : out std_logic; -- 6800-style IO enable, active high
+													-- Unconnected in Minimig design
+        vma           : buffer std_logic:='1';	-- Valid Memory Address (for 6800 peripherals)
+																-- Unconnected in Minimig design
+
+		  -- TG68 specific signals...
+		  
         wrd           : out std_logic;
-        ena7RDreg      : in std_logic:='1';
-        ena7WRreg      : in std_logic:='1';
-        enaWRreg      : in std_logic:='1';
+        ena7RDreg      : in std_logic:='1';	-- set by SDRAM Controller
+        ena7WRreg      : in std_logic:='1';	-- set by SDRAM Controller
+        enaWRreg      : in std_logic:='1';	-- set by SDRAM Controller
         
-        fromram    	  : in std_logic_vector(15 downto 0);
-        ramready      : in std_logic:='0';
-        cpu           : in std_logic_vector(1 downto 0);
-        memcfg           : in std_logic_vector(5 downto 0);
-        ramaddr    	  : out std_logic_vector(31 downto 0);
-        cpustate      : out std_logic_vector(5 downto 0);
-		nResetOut	  : out std_logic;
-        skipFetch     : buffer std_logic;
-        cpuDMA         : buffer std_logic;
-        ramlds        : out std_logic;
-        ramuds        : out std_logic
+        fromram    	  : in std_logic_vector(15 downto 0);	-- Data input from SDRAM controller
+        ramready      : in std_logic:='0';						-- Ready signal from SDRAM controller
+        cpu           : in std_logic_vector(1 downto 0);		-- From minimig, selects between 68000/10/20.
+        memcfg           : in std_logic_vector(5 downto 0); -- From Minimig, used to configure fastram
+        ramaddr    	  : out std_logic_vector(31 downto 0); -- Address output to SDRAM controller
+        cpustate      : out std_logic_vector(5 downto 0);	-- Used by SDRAM controller
+
+		  nResetOut	  : out std_logic;
+        skipFetch     : buffer std_logic;	-- n/c in Minimig
+        cpuDMA         : buffer std_logic;	-- Used by SDRAM controller
+        ramlds        : out std_logic;	-- Lower DS for SDRAM controller
+        ramuds        : out std_logic	-- Upper DS for SDRAM controller
         );
 end TG68K;
 
 ARCHITECTURE logic OF TG68K IS
 
-
+-- Interface description for the core of the processor.
 COMPONENT TG68KdotC_Kernel 
 	generic(
 		SR_Read : integer:= 2;         --0=>user,   1=>privileged,      2=>switchable with CPU(0)
@@ -98,11 +131,13 @@ COMPONENT TG68KdotC_Kernel
 
 
    SIGNAL cpuaddr     : std_logic_vector(31 downto 0);
-   SIGNAL t_addr      : std_logic_vector(31 downto 0);
+   SIGNAL t_addr      : std_logic_vector(31 downto 0);	-- Translated address?  Temp address?
 --   SIGNAL data_write  : std_logic_vector(15 downto 0);
 --   SIGNAL t_data      : std_logic_vector(15 downto 0);
-   SIGNAL r_data      : std_logic_vector(15 downto 0);
-   SIGNAL cpuIPL      : std_logic_vector(2 downto 0);
+   SIGNAL r_data      : std_logic_vector(15 downto 0);	-- Data in from Agnus.
+	SIGNAL w_data		 : std_logic_vector(15 downto 0);	-- Data out from the kernel
+   SIGNAL cpuIPL      : std_logic_vector(2 downto 0);	-- Interrupt level
+	-- FIXME what do the _s and _e values signify?
    SIGNAL addr_akt_s  : std_logic;
    SIGNAL addr_akt_e  : std_logic;
    SIGNAL data_akt_s  : std_logic;
@@ -116,20 +151,20 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL rw_s        : std_logic;
    SIGNAL rw_e        : std_logic;
    SIGNAL vpad        : std_logic;
-   SIGNAL waitm       : std_logic;
+   SIGNAL waitm       : std_logic;	-- Wait memory?  
    SIGNAL clkena_e    : std_logic;
    SIGNAL S_state     : std_logic_vector(1 downto 0);
    SIGNAL S_stated     : std_logic_vector(1 downto 0);
-   SIGNAL decode	  : std_logic;
+-- SIGNAL decode	  : std_logic;
    SIGNAL wr	      : std_logic;
    SIGNAL uds_in	  : std_logic;
    SIGNAL lds_in	  : std_logic;
-   SIGNAL state       : std_logic_vector(1 downto 0);
+   SIGNAL state       : std_logic_vector(1 downto 0);  -- 00-> fetch code 10->read data 11->write data 01->no memaccess (setup address?)
    SIGNAL clkena	  : std_logic;
 --   SIGNAL n_clk		  : std_logic;
    SIGNAL vmaena	  : std_logic;
    SIGNAL vmaenad	  : std_logic;
-   SIGNAL state_ena	  : std_logic;
+   SIGNAL state_ena	  : std_logic;	-- 1 during TG68 instruction phase when the processor is off the bus (state 01)
    SIGNAL sync_state3 : std_logic;
    SIGNAL eind	      : std_logic;
    SIGNAL eindd	      : std_logic;
@@ -137,13 +172,15 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL autoconfig_out: std_logic;
    SIGNAL autoconfig_data: std_logic_vector(3 downto 0);
    SIGNAL sel_fast: std_logic;
+	SIGNAL sel_akiko: std_logic;
+	SIGNAL akiko_data: std_logic_vector(15 downto 0);
    SIGNAL slower       : std_logic_vector(3 downto 0);
 
 
 	type sync_states is (sync0, sync1, sync2, sync3, sync4, sync5, sync6, sync7, sync8, sync9);
 	signal sync_state		: sync_states;
 	
-   SIGNAL datatg68      : std_logic_vector(15 downto 0);
+   SIGNAL datatg68      : std_logic_vector(15 downto 0);	-- Data being supplied to the TG68 kernel
    SIGNAL ramcs	      : std_logic;
 
 BEGIN  
@@ -153,11 +190,17 @@ BEGIN
 	addr <= cpuaddr;-- WHEN addr_akt_e='1' ELSE t_addr WHEN addr_akt_s='1' ELSE "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
 --	data <= data_write WHEN data_akt_e='1' ELSE t_data WHEN data_akt_s='1' ELSE "ZZZZZZZZZZZZZZZZ";
 --	datatg68 <= fromram WHEN sel_fast='1' ELSE r_data; 
-	datatg68 <= fromram WHEN sel_fast='1' ELSE r_data WHEN sel_autoconfig='0' ELSE autoconfig_data&r_data(11 downto 0); 
+--	datatg68 <= fromram WHEN sel_fast='1' ELSE r_data WHEN sel_autoconfig='0' ELSE autoconfig_data&r_data(11 downto 0); 
+	data_write <= w_data;
+	datatg68 <= fromram WHEN sel_fast='1'
+		ELSE autoconfig_data&r_data(11 downto 0) when sel_autoconfig='1'
+		else akiko_data when sel_akiko='1'
+		else r_data;
 --	toram <= data_write;
 	
-    sel_autoconfig <= '1' when cpuaddr(23 downto 19)="11101" AND autoconfig_out='1' ELSE '0'; --$E80000 - $EFFFFF
+   sel_autoconfig <= '1' when cpuaddr(23 downto 19)="11101" AND autoconfig_out='1' ELSE '0'; --$E80000 - $EFFFFF
 	sel_fast <= '1' when state/="01" AND (cpuaddr(23 downto 21)="001" OR cpuaddr(23 downto 21)="010" OR cpuaddr(23 downto 21)="011" OR cpuaddr(23 downto 21)="100") ELSE '0'; --$200000 - $9FFFFF
+   sel_akiko <= '1' when cpuaddr(23 downto 16)="10111000" else '0'; -- $B80000
 --	sel_fast <= '1' when cpuaddr(23 downto 21)="001" OR cpuaddr(23 downto 21)="010" ELSE '0'; --$200000 - $5FFFFF
 --	sel_fast <= '1' when cpuaddr(23 downto 19)="11111" ELSE '0'; --$F800000;
 --	sel_fast <= '0'; --$200000 - $9FFFFF
@@ -191,7 +234,7 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 		IPL => cpuIPL,				  	-- : in std_logic_vector(2 downto 0):="111";
 		IPL_autovector => '1',   	-- : in std_logic:='0';
         addr => cpuaddr,           	-- : buffer std_logic_vector(31 downto 0);
-        data_write => data_write,     -- : out std_logic_vector(15 downto 0);
+        data_write => w_data,     -- : out std_logic_vector(15 downto 0);
 		busstate => state,	  	  	-- : buffer std_logic_vector(1 downto 0);	
         regin => open,          	-- : out std_logic_vector(31 downto 0);
 		nWr => wr,			  	-- : out std_logic;
@@ -288,6 +331,20 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 	PROCESS (clk)
 	BEGIN
 		state_ena <= '0';
+		-- Clock is enabled when:
+		-- clkena_in=1 (permanently the case in Minimig design)
+		--	AND:
+		-- (
+		-- 	state="01" - TG68 instruction phase in which no data transfer takes place
+		-- 	OR
+		--		(
+		-- 		ena7RDreg=1
+		--			AND
+		--			clkena_e=1
+		--		)
+		--		OR
+		--		ramready=1
+		--	)
 		IF clkena_in='1' AND enaWRreg='1' AND (state="01" OR (ena7RDreg='1' AND clkena_e='1') OR ramready='1') THEN
 			clkena <= '1';
 		ELSE 
@@ -308,14 +365,14 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 				
 PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 	BEGIN
-		IF state="01" THEN 
+		IF state="01" THEN -- No memory access on this cycle...
 			as <= '1';
 			rw <= '1';
 			uds <= '1';
 			lds <= '1';
 		ELSE
-			as <= (as_s AND as_e) OR sel_fast;
-			rw <= rw_s AND rw_e;
+			as <= (as_s AND as_e) OR sel_fast or sel_akiko or sel_autoconfig; -- _as is held inactive for Zorro II cycles, since Minimig doesn't need to know about them.
+			rw <= rw_s AND rw_e;	-- Are "e" signals "enable"?  If so, why AND, not OR, since these are active low?
 			uds <= uds_s AND uds_e;
 			lds <= lds_s AND lds_e;
 		END IF;
@@ -328,7 +385,8 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 			addr_akt_s <= '0';
 			data_akt_s <= '0';
 		ELSIF rising_edge(clk) THEN
-        	IF ena7WRreg='1' THEN
+        	IF ena7WRreg='1' THEN	-- What's ena7WRreg?  "s" versions of signals come from this block
+											-- The combination of "e" and "s" signals may be a timing fix of some kind?
 				as_s <= '1';
 				rw_s <= '1';
 				uds_s <= '1';
@@ -336,25 +394,25 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 				addr_akt_s <= '0';
 				data_akt_s <= '0';
 					CASE S_state IS
-						WHEN "00" => IF state/="01" AND sel_fast='0' THEN
-										 uds_s <= uds_in;
+						WHEN "00" => IF state/="01" AND sel_fast='0' THEN -- Memory cycle not destined for ZorroII?
+										 uds_s <= uds_in;	-- Pass UDS and LDS onto the Minimig bus.
 										 lds_s <= lds_in;
 										S_state <= "01";
 									 END IF;
-						WHEN "01" => as_s <= '0';
-									 rw_s <= wr;
-									 uds_s <= uds_in;
+						WHEN "01" => as_s <= '0';	-- Assert Address Strobe
+									 rw_s <= wr;		-- Pass through r_w to Minimig...
+									 uds_s <= uds_in;	-- and uds/lds
 									 lds_s <= lds_in;
 									 S_state <= "10";
-									 t_addr <= cpuaddr;
+									 t_addr <= cpuaddr;	-- and now the address from the kernel
 --									 t_data <= data_write;
 						WHEN "10" =>
 									 addr_akt_s <= '1';
-									 data_akt_s <= NOT wr;
-									 r_data <= data_read;
+									 data_akt_s <= NOT wr;	-- 0 for read, 1 for write
+									 r_data <= data_read;	-- r_data fetched from Minimig bus
 									 IF waitm='0' OR (vma='0' AND sync_state=sync9) THEN
 										S_state <= "11";
-									 ELSE	
+									 ELSE		-- Wait state...
 										 as_s <= '0';
 										 rw_s <= wr;
 										 uds_s <= uds_in;
@@ -375,24 +433,24 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 			addr_akt_e <= '0';
 			data_akt_e <= '0';
 		ELSIF rising_edge(clk) THEN
-        	IF ena7RDreg='1' THEN
+        	IF ena7RDreg='1' THEN	-- ...and what's ena7RDreg?  Why do "e" versions of the signals come from here?
 				as_e <= '1';
 				rw_e <= '1';
 				uds_e <= '1';
 				lds_e <= '1';
-				clkena_e <= '0';
+				clkena_e <= '0';	-- Freeze processor (only effective while ena7RDreg is active)...
 				addr_akt_e <= '0';
 				data_akt_e <= '0';
 				CASE S_state IS
-					WHEN "00" => addr_akt_e <= '1';
-								 cpuIPL <= IPL;
-								 IF sel_fast='0' THEN
-									 IF state/="01" THEN
-										as_e <= '0';
+					WHEN "00" => addr_akt_e <= '1';	-- Analogue of _as maybe?
+								 cpuIPL <= IPL;	-- Forward IPL signals from Minimig to Processor
+								 IF sel_fast='0' THEN	-- Not a ZorroII cycle...
+									 IF state/="01" THEN	-- and a cycle in which memory transfer occurs...
+										as_e <= '0';	-- Force address strobe
 									 END IF;
-									 rw_e <= wr;
+									 rw_e <= wr;	-- forward r_w signal
 									 data_akt_e <= NOT wr;
-									 IF wr='1' THEN
+									 IF wr='1' THEN	-- Read cycle?
 										 uds_e <= uds_in;
 										 lds_e <= lds_in;					
 									 END IF;
@@ -409,9 +467,23 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 								 cpuIPL <= IPL;
 								 waitm <= dtack;
 					WHEN OTHERS => --null;			
-									 clkena_e <= '1';
+								 clkena_e <= '1';	-- Allow clock to run
 				END CASE;
 			END IF;
 		END IF;	
 	END PROCESS;
+
+myAkiko2: entity work.akiko2
+	port map(
+		clk => clk,
+		reset => reset,
+		address_in => cpuaddr(7 downto 2),
+		data_in => w_data,
+		data_out => akiko_data,
+		rd => wr,
+		hwr => uds_in,
+		lwr => lds_in,
+		sel_akiko => sel_akiko
+	);	
+
 END;	

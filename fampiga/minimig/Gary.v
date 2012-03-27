@@ -168,12 +168,12 @@ assign sel_boot = (cpu_address_in[23:12]==0 && boot) ? 1'b1 : 1'b0;
 
 assign sel_bank_1 = (cpu_address_in[23:21]==3'b001) ? 1'b1 : 1'b0;
 
-assign sel_akiko = (cpu_address_in[23:16]==8'b1011_1000) ? 1'b1 : 1'b0; // $B8xxxx
+//assign sel_akiko = (cpu_address_in[23:16]==8'b1011_1000) ? 1'b1 : 1'b0; // $B8xxxx
 
 //data bus slow down
-
+//                                  chipram                           $Cxxxxx                    $D0xxxx-$D7fff                            $DFxxxx                     
 assign dbs = (cpu_address_in[23:21]==3'b000 || cpu_address_in[23:20]==4'b1100 || cpu_address_in[23:19]==5'b1101_0 || cpu_address_in[23:16]==8'b1101_1111) ? 1'b1 : 1'b0;
 
-assign xbs = (~(sel_cia | sel_gayle | sel_ide));
+assign xbs = (~(sel_cia | sel_gayle | sel_ide)); //| sel_akiko));
 
 endmodule
