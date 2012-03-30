@@ -28,20 +28,19 @@
 -- (TG68KdotC_Kernel) and the rest of the Minimig.
 
 -- The kernel is similar to a "real" 68000; it lacks a few key signals, such as
--- the address strobe signal.  _dtack, and the Bus Request / Bus Grant signals are
--- also missing.  Wait states or bus arbitration are instead handled by freezing
+-- the address strobe signal, _dtack, and the Bus Request / Bus Grant signals
+-- Wait states and bus arbitration are instead handled by freezing
 -- the processor by pulling the clkena_in signal low.  (Similar to 68K Halt signal,
 -- but input-only.)
 
--- TG68K is a wrapper that provides the missing logic signals needed by Minigmig,
+-- TG68K is a wrapper that provides the missing logic signals needed by Minimig,
 -- (i.e. _as, _dtack) and also provides a separate address/data bus for Fast RAM,
--- a dtack signal for interfacing with the Minimig, and signals through which
--- the Minimig can configure the CPU. 
+-- and signals through which the Minimig can configure the CPU. 
 
 -- Also provided is AutoConfig data for the FastRAM expansion.
 
 
--- FIXME - replace fast_sel with a more general zorro_sel signal
+-- FIXME - replace fast_sel with a more general sel_zorro signal
 
 
 library ieee;
@@ -173,6 +172,7 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL autoconfig_data: std_logic_vector(3 downto 0);
    SIGNAL sel_fast: std_logic;
 	SIGNAL sel_akiko: std_logic;
+	SIGNAL sel_zorro: std_logic;  -- Aggregrate signal indicates that cycle need not concern the Minimig
 	SIGNAL akiko_data: std_logic_vector(15 downto 0);
    SIGNAL slower       : std_logic_vector(3 downto 0);
 
@@ -183,7 +183,8 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL datatg68      : std_logic_vector(15 downto 0);	-- Data being supplied to the TG68 kernel
    SIGNAL ramcs	      : std_logic;
 
-BEGIN  
+BEGIN 
+	sel_zorro <= sel_fast or sel_akiko or sel_autoconfig;
 --	n_clk <= NOT clk;
 --	wrd <= data_akt_e OR data_akt_s;
 	wrd <= wr;
@@ -205,9 +206,9 @@ BEGIN
 --	sel_fast <= '1' when cpuaddr(23 downto 19)="11111" ELSE '0'; --$F800000;
 --	sel_fast <= '0'; --$200000 - $9FFFFF
 --	sel_fast <= '1' when cpuaddr(24)='1' AND state/="01" ELSE '0'; --$1000000 - $1FFFFFF
-	ramcs <= NOT sel_fast;-- OR (state(0) AND NOT state(1));
+	ramcs <= NOT sel_fast;-- OR (state(0) AND NOT state(1));	-- Active low _CS signal?
 --	cpuDMA <= NOT ramcs;
-	cpuDMA <= sel_fast;
+	cpuDMA <= sel_fast;	-- Used purely by the SDRAM controller
 	cpustate <= clkena&slower(1 downto 0)&ramcs&state;
 	ramlds <= lds_in;
 	ramuds <= uds_in;
@@ -371,7 +372,7 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 			uds <= '1';
 			lds <= '1';
 		ELSE
-			as <= (as_s AND as_e) OR sel_fast or sel_akiko or sel_autoconfig; -- _as is held inactive for Zorro II cycles, since Minimig doesn't need to know about them.
+			as <= (as_s AND as_e) OR sel_zorro; -- _as is held inactive for Zorro II cycles, since Minimig doesn't need to know about them.
 			rw <= rw_s AND rw_e;	-- Are "e" signals "enable"?  If so, why AND, not OR, since these are active low?
 			uds <= uds_s AND uds_e;
 			lds <= lds_s AND lds_e;
@@ -394,7 +395,7 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 				addr_akt_s <= '0';
 				data_akt_s <= '0';
 					CASE S_state IS
-						WHEN "00" => IF state/="01" AND sel_fast='0' THEN -- Memory cycle not destined for ZorroII?
+						WHEN "00" => IF state/="01" AND sel_zorro='0' THEN -- Memory cycle not destined for ZorroII?
 										 uds_s <= uds_in;	-- Pass UDS and LDS onto the Minimig bus.
 										 lds_s <= lds_in;
 										S_state <= "01";
@@ -444,7 +445,7 @@ PROCESS (clk, reset, state, as_s, as_e, rw_s, rw_e, uds_s, uds_e, lds_s, lds_e)
 				CASE S_state IS
 					WHEN "00" => addr_akt_e <= '1';	-- Analogue of _as maybe?
 								 cpuIPL <= IPL;	-- Forward IPL signals from Minimig to Processor
-								 IF sel_fast='0' THEN	-- Not a ZorroII cycle...
+								 IF sel_zorro='0' THEN	-- Not a ZorroII cycle...
 									 IF state/="01" THEN	-- and a cycle in which memory transfer occurs...
 										as_e <= '0';	-- Force address strobe
 									 END IF;
