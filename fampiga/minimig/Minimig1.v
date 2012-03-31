@@ -287,7 +287,7 @@ wire		sel_reg;				// chip register select
 wire		sel_cia_a;				// cia A select
 wire		sel_cia_b;				// cia B select
 wire		sel_boot;				// boot rom select
-wire		sel_akiko;			// Akiko select
+//wire		sel_akiko;			// Akiko select
 wire		int2;					// intterrupt 2
 wire		int3;					// intterrupt 3 
 wire		int6;					// intterrupt 6
@@ -879,19 +879,20 @@ gayle GAYLE1
 	
 );
 
-// instantiate Akiko
-akiko AKIKO1
-(
-	.clk(clk),
-	.reset(cpurst),
-	.address_in(cpu_address_out),
-	.data_in(cpu_data_out),
-	.data_out(akiko_data_out),
-	.rd(cpu_rd),
-	.hwr(cpu_hwr),
-	.lwr(cpu_lwr),
-	.sel_akiko(sel_akiko)
-);
+//
+//// instantiate Akiko
+//akiko AKIKO1
+//(
+//	.clk(clk),
+//	.reset(cpurst),
+//	.address_in(cpu_address_out),
+//	.data_in(cpu_data_out),
+//	.data_out(akiko_data_out),
+//	.rd(cpu_rd),
+//	.hwr(cpu_hwr),
+//	.lwr(cpu_lwr),
+//	.sel_akiko(sel_akiko)
+//);
 
 // instantiate boot rom
 //bootrom BOOTROM1 
@@ -947,8 +948,8 @@ assign cpu_data_in[15:0] = (gary_data_out[15:0]
 						 | boot_data_out[15:0]
 						 | cia_data_out[15:0]
 						 | ar3_data_out[15:0]
-						 | gayle_data_out[15:0]
-						 | akiko_data_out[15:0]);
+						 | gayle_data_out[15:0]);
+//						 | akiko_data_out[15:0]);
 
 assign custom_data_out[15:0] = (agnus_data_out[15:0]
 							 | paula_data_out[15:0]

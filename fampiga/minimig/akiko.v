@@ -42,7 +42,7 @@ reg [6:0] wrpointer;
 wire sel;
 
 // address decoding
-assign sel = sel_akiko && address_in[7:1]==8'b0011_100; // 0x38
+assign sel = sel_akiko && address_in[7:2]==8'b0011_10; // 0x38 or 0x3a, allows 32-bit access
 
 always @(posedge clk)
 	if(reset)
