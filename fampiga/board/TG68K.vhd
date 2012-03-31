@@ -39,9 +39,10 @@
 
 -- Also provided is AutoConfig data for the FastRAM expansion.
 
-
 -- FIXME - replace fast_sel with a more general sel_zorro signal
-
+-- TODO: Route chipmem access away from the Minimig in '020 mode for speed?
+--			Or maybe use a chipram shadow
+--       Another 4 megs of Fast RAM maybe?
 
 library ieee;
 use ieee.std_logic_1164.all;
