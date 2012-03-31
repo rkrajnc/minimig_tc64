@@ -184,7 +184,7 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL ramcs	      : std_logic;
 
 BEGIN 
-	sel_zorro <= sel_fast or sel_akiko or sel_autoconfig;
+	sel_zorro <= sel_fast or sel_akiko;
 --	n_clk <= NOT clk;
 --	wrd <= data_akt_e OR data_akt_s;
 	wrd <= wr;
@@ -334,7 +334,9 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 		state_ena <= '0';
 		-- Clock is enabled when:
 		-- clkena_in=1 (permanently the case in Minimig design)
-		--	AND:
+		--	AND
+		-- enaWRreg=1 
+		-- AND
 		-- (
 		-- 	state="01" - TG68 instruction phase in which no data transfer takes place
 		-- 	OR
@@ -345,8 +347,11 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 		--		)
 		--		OR
 		--		ramready=1
+		--		OR
+		--		sel_akiko=1
 		--	)
-		IF clkena_in='1' AND enaWRreg='1' AND (state="01" OR (ena7RDreg='1' AND clkena_e='1') OR ramready='1') THEN
+		IF clkena_in='1' AND enaWRreg='1' AND (state="01" OR (ena7RDreg='1' AND clkena_e='1')
+			OR ramready='1' OR sel_akiko='1') THEN
 			clkena <= '1';
 		ELSE 
 			clkena <= '0';
@@ -481,9 +486,9 @@ myAkiko2: entity work.akiko2
 		address_in => cpuaddr(7 downto 2),
 		data_in => w_data,
 		data_out => akiko_data,
-		rd => wr,
-		hwr => uds_in,
-		lwr => lds_in,
+		wr => wr,
+		hds => uds_in,
+		lds => lds_in,
 		sel_akiko => sel_akiko
 	);	
 
