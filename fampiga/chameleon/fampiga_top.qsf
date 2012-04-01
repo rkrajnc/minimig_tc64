@@ -152,15 +152,15 @@ set_global_assignment -name USE_SIGNALTAP_FILE stp1.stp
 set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
 set_global_assignment -name OPTIMIZE_MULTI_CORNER_TIMING ON
 set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
-set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE AREA
+set_global_assignment -name CYCLONEII_OPTIMIZATION_TECHNIQUE BALANCED
 set_global_assignment -name GENERATE_RBF_FILE ON
 set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
 set_global_assignment -name MISC_FILE "D:/_chameleon/dockingstation/chameleon/fampiga_top.dpf"
 set_global_assignment -name FMAX_REQUIREMENT "108 MHz"
 set_global_assignment -name ENABLE_CLOCK_LATENCY ON
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
-set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (VHDL)"
-set_global_assignment -name EDA_OUTPUT_DATA_FORMAT VHDL -section_id eda_simulation
+set_global_assignment -name EDA_SIMULATION_TOOL "<None>"
+set_global_assignment -name EDA_OUTPUT_DATA_FORMAT NONE -section_id eda_simulation
 set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT EXTRA
 set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
@@ -205,8 +205,16 @@ set_global_assignment -name VERILOG_FILE ../minimig/Paula.v
 set_global_assignment -name VERILOG_FILE ../minimig/PS2Keyboard.v
 set_global_assignment -name VERILOG_FILE ../minimig/Sprites.v
 set_global_assignment -name VHDL_FILE ../board/chameleon_docking_station.vhd
-set_global_assignment -name SDC_FILE fampiga.sdc
 set_global_assignment -name VERILOG_FILE ../minimig/akiko.v
 set_global_assignment -name VHDL_FILE ../board/akiko2.vhd
 set_global_assignment -name FITTER_EARLY_TIMING_ESTIMATE_MODE PESSIMISTIC
+set_global_assignment -name ENABLE_DRC_SETTINGS ON
+set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
+set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
+set_global_assignment -name AUTO_PACKED_REGISTERS_STRATIXII NORMAL
+set_global_assignment -name MUX_RESTRUCTURE OFF
+set_global_assignment -name AUTO_SHIFT_REGISTER_RECOGNITION ALWAYS
+set_global_assignment -name SAVE_DISK_SPACE OFF
+set_global_assignment -name FLOW_ENABLE_RTL_VIEWER ON
+set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

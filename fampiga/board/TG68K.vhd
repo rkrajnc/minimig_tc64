@@ -39,8 +39,18 @@
 
 -- Also provided is AutoConfig data for the FastRAM expansion.
 
-
 -- FIXME - replace fast_sel with a more general sel_zorro signal
+-- TODO:
+
+--	Done	Route chipmem access away from the Minimig in '020 mode for speed?
+--			(Must take care to enable this only after ROM shadowing has finished...)
+
+--			Turbo ROM - route Kickstart away from Minimig?
+
+--			Or maybe use a chipram shadow at, say, 0x01000000 - 0x011fffff
+
+--       Another 4 megs of Fast RAM maybe? (0x1c00000 - 0x1ffffff?)
+
 
 
 library ieee;
@@ -171,6 +181,8 @@ COMPONENT TG68KdotC_Kernel
    SIGNAL autoconfig_out: std_logic;
    SIGNAL autoconfig_data: std_logic_vector(3 downto 0);
    SIGNAL sel_fast: std_logic;
+	SIGNAL sel_chipram: std_logic;
+	SIGNAL turbo_chipram : std_logic;
 	SIGNAL sel_akiko: std_logic;
 	SIGNAL sel_zorro: std_logic;  -- Aggregrate signal indicates that cycle need not concern the Minimig
 	SIGNAL akiko_data: std_logic_vector(15 downto 0);
@@ -200,8 +212,20 @@ BEGIN
 --	toram <= data_write;
 	
    sel_autoconfig <= '1' when cpuaddr(23 downto 19)="11101" AND autoconfig_out='1' ELSE '0'; --$E80000 - $EFFFFF
-	sel_fast <= '1' when state/="01" AND (cpuaddr(23 downto 21)="001" OR cpuaddr(23 downto 21)="010" OR cpuaddr(23 downto 21)="011" OR cpuaddr(23 downto 21)="100") ELSE '0'; --$200000 - $9FFFFF
-   sel_akiko <= '1' when cpuaddr(23 downto 16)="10111000" else '0'; -- $B80000
+	sel_chipram <= '1' when state/="01" AND (cpuaddr(23 downto 21)="000") ELSE '0'; --$000000 - $1FFFFF
+
+	sel_fast <= '1' when state/="01" AND
+		(
+			( turbo_chipram='1' AND cpuaddr(23 downto 21)="000" ) OR
+			cpuaddr(23 downto 21)="001" OR
+			cpuaddr(23 downto 21)="010" OR
+			cpuaddr(23 downto 21)="011" OR
+			cpuaddr(23 downto 21)="100"
+		)
+		ELSE '0'; --$200000 - $9FFFFF
+
+		sel_akiko <= '1' when cpuaddr(23 downto 16)="10111000" else '0'; -- $B80000
+
 --	sel_fast <= '1' when cpuaddr(23 downto 21)="001" OR cpuaddr(23 downto 21)="010" ELSE '0'; --$200000 - $5FFFFF
 --	sel_fast <= '1' when cpuaddr(23 downto 19)="11111" ELSE '0'; --$F800000;
 --	sel_fast <= '0'; --$200000 - $9FFFFF
@@ -213,7 +237,7 @@ BEGIN
 	ramlds <= lds_in;
 	ramuds <= uds_in;
 	ramaddr(23 downto 0) <= cpuaddr(23 downto 0);
-	ramaddr(24) <= sel_fast;
+	ramaddr(24) <= sel_fast and not sel_chipram;
 	ramaddr(31 downto 25) <= cpuaddr(31 downto 25);
 
 
@@ -269,9 +293,12 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 		IF rising_edge(clk) THEN
 			IF reset='0' THEN
 				autoconfig_out <= '1';		--autoconfig on
+				turbo_chipram <= '0';	-- disable turbo_chipram until we know kickstart's running...
 			ELSIF enaWRreg='1' THEN
 				IF sel_autoconfig='1' AND state="11"AND uds_in='0' AND cpuaddr(6 downto 1)="100100" THEN
 					autoconfig_out <= '0';		--autoconfig off
+					turbo_chipram <= cpu(1);	-- enable turbo_chipram after autoconfig has been done...
+													-- DONE - make this dependent upon CPU type?
 				END IF;	
 			END IF;	
 		END IF;	
@@ -348,7 +375,7 @@ pf68K_Kernel_inst: TG68KdotC_Kernel
 		--		OR
 		--		ramready=1
 		--		OR
-		--		sel_akiko=1
+		--		sel_akiko=1  -- FIXME - should be sel_zorro, but not fastram.  So exclude fastram from zorro?
 		--	)
 		IF clkena_in='1' AND enaWRreg='1' AND (state="01" OR (ena7RDreg='1' AND clkena_e='1')
 			OR ramready='1' OR sel_akiko='1') THEN
