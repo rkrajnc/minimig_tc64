@@ -80,7 +80,7 @@ signal cas_sd_cs	:std_logic_vector(3 downto 0);
 signal cas_sd_ras	:std_logic;
 signal cas_sd_cas	:std_logic;
 signal cas_sd_we 	:std_logic;
-signal cas_dqm		:std_logic_vector(1 downto 0);
+signal cas_dqm		:std_logic_vector(7 downto 0);
 signal init_done	:std_logic;
 signal datain		:std_logic_vector(15 downto 0);
 signal datawr		:std_logic_vector(15 downto 0);
@@ -226,7 +226,7 @@ begin
 	end process;		
 		
 	
---Daten�bernahme
+--Datenbernahme
 	process (sysclk, reset) begin
 		if reset = '0' THEN
 			zcache_fill <= '0';
@@ -363,7 +363,7 @@ mytwc : component TwoWayCache
 --	end process;		
 --		
 --	
-----Daten�bernahme
+----Datenbernahme
 --	process (sysclk, reset) begin
 --		if reset = '0' THEN
 --			ccache_fill <= '0';
@@ -464,7 +464,7 @@ mytwc : component TwoWayCache
 
 	process (sysclk, reset, sdwrite, datain) begin
 		IF sdwrite='1' THEN
-			sdata <= datawr;
+			sdata <= datain;
 		ELSE
 			sdata <= "ZZZZZZZZZZZZZZZZ";
 		END IF;
@@ -473,15 +473,15 @@ mytwc : component TwoWayCache
 		END IF;
 
 		if (sysclk'event and sysclk='1') THEN
-			if sdram_state=ph2 THEN
-				IF chipCycle='1' THEN
-					datawr <= chipWR;
-				ELSIF cpuCycle='1' THEN
-					datawr <= cpuWR;
-				ELSE	
-					datawr <= hostWR;
-				END IF;
-			END IF;
+--			if sdram_state=ph2 THEN
+--				IF chipCycle='1' THEN
+--					datawr <= chipWR;
+--				ELSIF cpuCycle='1' THEN
+--					datawr <= cpuWR;
+--				ELSE	
+--					datawr <= hostWR;
+--				END IF;
+--			END IF;
 			sdata_reg <= sdata;
 			c_7mdd <= c_7md;
 			c_7mdr <= c_7md AND NOT c_7mdd;
@@ -586,7 +586,7 @@ mytwc : component TwoWayCache
 							sd_ras <= '0';
 							sd_cas <= '0';
 							sd_we <= '0';
-							sdaddr <= "0001000110010"; --BURST=4 LATENCY=3
+							sdaddr <= "0000000110010"; --BURST=4 LATENCY=3
 						when others =>	null;	--NOP
 					end case;
 				END IF;
@@ -620,7 +620,7 @@ mytwc : component TwoWayCache
 							chipCycle <= '1';
 							sdaddr <= '0'&chipAddr(20 downto 9);
 							ba <= chipAddr(22 downto 21);
-							cas_dqm <= chipU& chipL;
+							cas_dqm <= "111111"&chipU& chipL;
 							sd_cs <= "1110"; 	--ACTIVE
 							sd_ras <= '0';
 							casaddr <= '0'&chipAddr&'0';	
@@ -644,7 +644,7 @@ mytwc : component TwoWayCache
 							cpuCycle <= '1';
 							sdaddr <= cpuAddr(24)&cpuAddr(20 downto 9);
 							ba <= cpuAddr(22 downto 21);
-							cas_dqm <= cpuU& cpuL;
+							cas_dqm <= "111111"&cpuU& cpuL;
 							sd_cs <= "1110"; --ACTIVE
 							sd_ras <= '0';
 							casaddr <= cpuAddr(24 downto 1)&'0';
@@ -662,7 +662,7 @@ mytwc : component TwoWayCache
 							hostCycle <= '1';
 							sdaddr <= '0'&zmAddr(20 downto 9);
 							ba <= zmAddr(22 downto 21);
-							cas_dqm <= hostU& hostL;
+							cas_dqm <= "111111"&hostU& hostL;
 							sd_cs <= "1110"; --ACTIVE
 							sd_ras <= '0';
 							casaddr <= zmAddr;
@@ -684,12 +684,27 @@ mytwc : component TwoWayCache
 						ba <= casaddr(22 downto 21);
 						sd_cs <= cas_sd_cs; 
 						IF cas_sd_we='0' THEN
-							dqm <= cas_dqm;
+							dqm <= cas_dqm(1 downto 0);
 						END IF;
 						sd_ras <= cas_sd_ras;
 						sd_cas <= cas_sd_cas;
 						sd_we  <= cas_sd_we;
-						
+
+					when ph5 =>
+						IF cas_sd_we='0' THEN
+							dqm <= cas_dqm(3 downto 2);
+						END IF;
+
+					when ph6 =>
+						IF cas_sd_we='0' THEN
+							dqm <= cas_dqm(5 downto 4);
+						END IF;
+
+					when ph7 =>
+						IF cas_sd_we='0' THEN
+							dqm <= cas_dqm(7 downto 6);
+						END IF;
+
 					when ph8 =>
 						cache_fill<='1';
 					when ph9 =>
