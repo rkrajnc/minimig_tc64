@@ -80,7 +80,7 @@ signal cas_sd_cs	:std_logic_vector(3 downto 0);
 signal cas_sd_ras	:std_logic;
 signal cas_sd_cas	:std_logic;
 signal cas_sd_we 	:std_logic;
-signal cas_dqm		:std_logic_vector(7 downto 0);
+signal cas_dqm		:std_logic_vector(7 downto 0); -- We have four words to write
 signal init_done	:std_logic;
 signal datain		:std_logic_vector(15 downto 0);
 signal datawr		:std_logic_vector(15 downto 0);
@@ -503,8 +503,10 @@ mytwc : component TwoWayCache
 					when ph3 =>	sdwrite <= '1';
 					when ph4 =>	sdwrite <= '1';
 					when ph5 => sdwrite <= '1';
-					when ph6 =>	enaWRreg <= '1';
+					when ph6 => sdwrite <= not cas_sd_we;
+								enaWRreg <= '1';
 								ena7RDreg <= '1';
+					when ph7 => sdwrite <= not cas_sd_we;
 					when ph10 => enaWRreg <= '1';
 					when ph14 => enaWRreg <= '1';
 								ena7WRreg <= '1';
@@ -586,7 +588,7 @@ mytwc : component TwoWayCache
 							sd_ras <= '0';
 							sd_cas <= '0';
 							sd_we <= '0';
-							sdaddr <= "0000000110010"; --BURST=4 LATENCY=3
+							sdaddr <= "0000000110010"; --BURST=4 LATENCY=3, Burst writes
 						when others =>	null;	--NOP
 					end case;
 				END IF;
@@ -637,8 +639,8 @@ mytwc : component TwoWayCache
 							
 		--					The Amiga CPU gets next bite of the cherry, unless the OSD CPU has been cycle-starved...
 		--					ELSIF cpuState(2)='0' AND cpuState(5)='0'
-						-- Request from read cache, or direct write request.
-						ELSIF (cache_req='1' or (cpuState(2)='0' and cpuState(1 downto 0)="11"))
+						-- Request from read cache
+						ELSIF (cache_req='1')
 							and (hostslot_cnt/="00000000" or (hostState(2)='1' or hostena='1')) THEN	
 							-- We only yeild to the OSD CPU if it's both cycle-starved and ready to go.
 							cpuCycle <= '1';
@@ -648,13 +650,22 @@ mytwc : component TwoWayCache
 							sd_cs <= "1110"; --ACTIVE
 							sd_ras <= '0';
 							casaddr <= cpuAddr(24 downto 1)&'0';
-							if (cpuState(1) and cpuState(0))='1' then	-- Write cycle
---								casaddr <= cpuAddr(24 downto 1)&'0';
-								cas_sd_we <= '0';
-							else
---								casaddr <= cpuAddr(24 downto 3)&"000";
-								cas_sd_we <= '1';
-							end if;
+							cas_sd_we <= '1';
+							datain <= cpuWR;
+							cas_sd_cas <= '0';
+					
+							-- Direct write request
+						ELSIF (cpuState(2 downto 0)="011")
+							and (hostslot_cnt/="00000000" or (hostState(2)='1' or hostena='1')) THEN	
+							-- We only yeild to the OSD CPU if it's both cycle-starved and ready to go.
+							cpuCycle <= '1';
+							sdaddr <= cpuAddr(24)&cpuAddr(20 downto 9);
+							ba <= cpuAddr(22 downto 21);
+							cas_dqm <= "111111"&cpuU& cpuL;
+							sd_cs <= "1110"; --ACTIVE
+							sd_ras <= '0';
+							casaddr <= cpuAddr(24 downto 1)&'0';
+							cas_sd_we <= '0';
 							datain <= cpuWR;
 							cas_sd_cas <= '0';
 						ELSIF hostState(2)='0' AND hostena='0' THEN
