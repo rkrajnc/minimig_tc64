@@ -38,6 +38,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "config.h"
 #include "menu.h"
 
+#define OSDCOLOR_TOPLEVEL 0x01
+#define OSDCOLOR_SUBMENU 0x03
+#define OSDCOLOR_WARNING 0x10
 
 // other constants
 #define DIRSIZE 8 // number of items in directory display window
@@ -71,8 +74,9 @@ extern const char version[];
 const char *config_filter_msg[] =  {"none", "HORIZONTAL", "VERTICAL", "H+V"};
 const char *config_memory_chip_msg[] = {"0.5 MB", "1.0 MB", "1.5 MB", "2.0 MB"};
 const char *config_memory_slow_msg[] = {"none  ", "0.5 MB", "1.0 MB", "1.5 MB"};
+const char *config_on_off_msg[] = {"off", "on "};
 const char *config_scanlines_msg[] = {"off", "dim", "black"};
-const char *config_memory_fast_msg[] = {"none  ", "2.0 MB", "4.0 MB", "8.0 MB"};
+const char *config_memory_fast_msg[] = {"none  ", "2.0 MB", "4.0 MB", "8.0 MB", "24.0 MB"};
 const char *config_cpu_msg[] = {"68000 ", "68010", "-----","020 alpha"};
 const char *config_hdf_msg[] = {"Disabled", "Hardfile (disk img)", "MMC/SD card", "MMC/SD partition 1", "MMC/SD partition 2", "MMC/SD partition 3", "MMC/SD partition 4"};
 
@@ -87,9 +91,9 @@ const char *helptexts[]={
 	"                                Minimig can emulate an A600 IDE harddisk interface.  The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).  It is also possible to use either the entire SD card or an individual partition as an emulated harddisk.",
 	"                                Minimig's processor core can emulate a 68000 or 68020 processor (though the 68020 mode is still experimental.)  If you're running software built for 68000, there's no advantage to using the 68020 mode, since the 68000 emulation runs just as fast.",
 #ifdef ACTIONREPLAY_BROKEN
-	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 8 megabytes of true Fast RAM.",
+	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 24 megabytes of true Fast RAM.",
 #else
-	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 8 megabytes of true Fast RAM.  To use the Action Replay feature you will need an Action Replay 3 ROM file on the SD card, named AR3.ROM.  You will also need to set Fast RAM to no more than 2 megabytes.",
+	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 24 megabytes of true Fast RAM.  To use the Action Replay feature you will need an Action Replay 3 ROM file on the SD card, named AR3.ROM.  You will also need to set Fast RAM to no more than 2 megabytes.",
 #endif
 	"                                Minimig's video features include a blur filter, to simulate the poorer picture quality on older monitors, and also scanline generation to simulate the appearance of a screen with low vertical resolution.",
 	0
@@ -138,6 +142,7 @@ void SelectFile(char* pFileExt, unsigned char Options, unsigned char MenuSelect,
 }
 
 #define STD_EXIT "            exit"
+#define STD_BACK "            back"
 #define HELPTEXT_DELAY 10000
 #define FRAME_DELAY 150
 
@@ -154,6 +159,7 @@ void ShowSplash()
     OsdWrite(6, "", 0,0);
     OsdWrite(7, "", 0,0);
 	OsdEnable(0);
+	OsdColor(OSDCOLOR_TOPLEVEL);
 }
 
 
@@ -359,6 +365,7 @@ void HandleUI(void)
         /* main menu                                                      */
         /******************************************************************/
     case MENU_MAIN1 :
+        OsdColor(OSDCOLOR_TOPLEVEL);
 		menumask=0x70;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig",OSD_ARROW_RIGHT);
 		helptext=helptexts[HELPTEXT_MAIN];
@@ -485,6 +492,7 @@ void HandleUI(void)
         /* second part of the main menu                                   */
         /******************************************************************/
     case MENU_MAIN2_1 :
+        OsdColor(OSDCOLOR_TOPLEVEL);
 		helptext=helptexts[HELPTEXT_MAIN];
 		menumask=0x3f;
  		OsdSetTitle("Settings",OSD_ARROW_LEFT|OSD_ARROW_RIGHT);
@@ -548,12 +556,19 @@ void HandleUI(void)
         break;
 
     case MENU_MISC1 :
+        OsdColor(OSDCOLOR_TOPLEVEL);
 		helptext=helptexts[HELPTEXT_MAIN];
 		menumask=0x0f;	// Reset, about and exit.
  		OsdSetTitle("Misc",OSD_ARROW_LEFT);
         OsdWrite(0, "    Reset", menusub == 0,0);
         OsdWrite(1, "", 0,0);
-        OsdWrite(2, "    Return to Chameleon", menusub == 1,0);
+		if(PLATFORM&(1<<PLATFORM_RECONFIG))
+	        OsdWrite(2, "    Return to Chameleon", menusub == 1,0);
+		else
+		{
+	        OsdWrite(2, "", 0,0);
+			menumask&=~0x02;	// Remove the Reconfigure option from the menu
+		}
 //        OsdWrite(3, "    (Not yet implemented)", 0,1);
         OsdWrite(3, "", 0,0);
         OsdWrite(4, "    About", menusub == 2,0);
@@ -596,6 +611,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ABOUT1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_NONE];
 		menumask=0x01;	// Just Exit
  		OsdSetTitle("About",0);
@@ -611,7 +627,7 @@ void HandleUI(void)
 //        OsdWrite(4, "", 0,0);
         OsdWrite(5, "", 0,0);
         OsdWrite(6, "", 0,0);
-        OsdWrite(7, STD_EXIT, menusub == 0,0);
+        OsdWrite(7, STD_BACK, menusub == 0,0);
 
 		StarsInit();
 		ScrollReset();
@@ -637,6 +653,7 @@ void HandleUI(void)
 		break;
 
     case MENU_LOADCONFIG_1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_NONE];
 		if(parentstate!=menustate)	// First run?
 		{
@@ -698,6 +715,7 @@ void HandleUI(void)
         /* file selection menu                                            */
         /******************************************************************/
     case MENU_FILE_SELECT1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_NONE];
  		OsdSetTitle("Select",0);
         PrintDirectory();
@@ -856,6 +874,7 @@ void HandleUI(void)
         /* reset menu                                                     */
         /******************************************************************/
     case MENU_RESET1 :
+        OsdColor(OSDCOLOR_WARNING);
 		helptext=helptexts[HELPTEXT_NONE];
 		OsdSetTitle("Reset",0);
 		menumask=0x03;	// Yes / No
@@ -892,6 +911,7 @@ void HandleUI(void)
         /* reconfigure confirmation                                       */
         /******************************************************************/
     case MENU_RECONF1 :
+        OsdColor(OSDCOLOR_WARNING);
 		helptext=helptexts[HELPTEXT_NONE];
 		OsdSetTitle("Exit",0);
 		menumask=0x03;	// Yes / No
@@ -913,7 +933,7 @@ void HandleUI(void)
 
         if (select && menusub == 0)
         {
-            OsdReconfig();
+            Reconfigure();
         }
 
         if (menu || (select && (menusub == 1))) // exit menu
@@ -926,88 +946,9 @@ void HandleUI(void)
         /******************************************************************/
         /* settings menu                                                  */
         /******************************************************************/
-/*
-    case MENU_SETTINGS1 :
-		menumask=0;
- 		OsdSetTitle("Settings",0);
-
-        OsdWrite(0, "", 0,0);
-        OsdWrite(1, "             chipset", menusub == 0,0);
-        OsdWrite(2, "             memory", menusub == 1,0);
-        OsdWrite(3, "             drives", menusub == 2,0);
-        OsdWrite(4, "             video", menusub == 3,0);
-        OsdWrite(5, "", 0,0);
-        OsdWrite(6, "", 0,0);
-
-        if (menusub == 5)
-            OsdWrite(7, "  \x12           save           \x12", 1,0);
-        else if (menusub == 4)
-            OsdWrite(7, "  \x13           exit           \x13", 1,0);
-        else
-            OsdWrite(7, STD_EXIT, 0,0);
-
-        menustate = MENU_SETTINGS2;
-        break;
-
-    case MENU_SETTINGS2 :
-
-        if (down && menusub < 5)
-        {
-            menusub++;
-            menustate = MENU_SETTINGS1;
-        }
-
-        if (up && menusub > 0)
-        {
-            menusub--;
-            menustate = MENU_SETTINGS1;
-        }
-
-        if (select)
-        {
-            if (menusub == 0)
-            {
-                menustate = MENU_SETTINGS_CHIPSET1;
-                menusub = 0;
-            }
-            else if (menusub == 1)
-            {
-                menustate = MENU_SETTINGS_MEMORY1;
-                menusub = 0;
-            }
-            else if (menusub == 2)
-            {
-                menustate = MENU_SETTINGS_DRIVES1;
-                menusub = 0;
-            }
-            else if (menusub == 3)
-            {
-                menustate = MENU_SETTINGS_VIDEO1;
-                menusub = 0;
-            }
-            else if (menusub == 4)
-            {
-                menustate = MENU_MAIN2_1;
-                menusub = 1;
-            }
-            else if (menusub == 5)
-            {
-//                SaveConfiguration(0);	// Use slot-based config filename instead
-										
-                menustate = MENU_SAVECONFIG_1;
-                menusub = 0;
-            }
-        }
-
-        if (menu)
-        {
-            menustate = MENU_MAIN2_1;
-            menusub = 1;
-        }
-        break;
-*/
 
     case MENU_SAVECONFIG_1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_NONE];
 		menumask=0x3f;
 		parentstate=menustate;
@@ -1074,6 +1015,7 @@ void HandleUI(void)
         /* chipset settings menu                                          */
         /******************************************************************/
     case MENU_SETTINGS_CHIPSET1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_CHIPSET];
 		menumask=0;
  		OsdSetTitle("Chipset",OSD_ARROW_LEFT|OSD_ARROW_RIGHT);
@@ -1092,7 +1034,7 @@ void HandleUI(void)
         OsdWrite(4, "", 0,0);
         OsdWrite(5, "", 0,0);
         OsdWrite(6, "", 0,0);
-        OsdWrite(7, STD_EXIT, menusub == 3,0);
+        OsdWrite(7, STD_BACK, menusub == 3,0);
 
         menustate = MENU_SETTINGS_CHIPSET2;
         break;
@@ -1168,42 +1110,57 @@ void HandleUI(void)
         /* memory settings menu                                           */
         /******************************************************************/
     case MENU_SETTINGS_MEMORY1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_MEMORY];
-		menumask=0x3f;
+		menumask=0x7f;
 		parentstate=menustate;
 
  		OsdSetTitle("Memory",OSD_ARROW_LEFT|OSD_ARROW_RIGHT);
 
         OsdWrite(0, "", 0,0);
-        strcpy(s, "      CHIP : ");
+        strcpy(s, "        Chip : ");
         strcat(s, config_memory_chip_msg[config.memory & 0x03]);
         OsdWrite(1, s, menusub == 0,0);
-        strcpy(s, "      SLOW : ");
+        strcpy(s, "        Slow : ");
         strcat(s, config_memory_slow_msg[config.memory >> 2 & 0x03]);
         OsdWrite(2, s, menusub == 1,0);
-        strcpy(s, "      FAST : ");
-        strcat(s, config_memory_fast_msg[config.memory >> 4 & 0x03]);
+        strcpy(s, "        Fast : ");
+        strcat(s, config_memory_fast_msg[config.fastram % 5]);
         OsdWrite(3, s, menusub == 2,0);
 
-        OsdWrite(4, "", 0,0);
+		if(PLATFORM&(1<<PLATFORM_TURBOCHIP))
+		{
+	        strcpy(s, "  Turbo Chip : ");
+	        strcat(s, config_on_off_msg[(config.fastram&128)==128 ? 1 : 0 ]);
+	        OsdWrite(4, s, menusub==3,0);
+		}
+		else
+		{
+	        OsdWrite(4, "", 0,0);
+			menumask&=0xf7;	// Remove option 3 from the menu mask.
+		}
 
-        strcpy(s, "      ROM  : ");
+        strcpy(s, "        ROM  : ");
         if (config.kickstart.long_name[0])
             strncat(s, config.kickstart.long_name, sizeof(config.kickstart.long_name));
         else
             strncat(s, config.kickstart.name, sizeof(config.kickstart.name));
-        OsdWrite(5, s, menusub == 3,0);
+        OsdWrite(5, s, menusub == 4,0);
 
-#ifdef ACTIONREPLAY_BROKEN
-        OsdWrite(0, "", 0,0);
-		menumask&=0xef;	// Remove bit 4
-#else
-        strcpy(s, "      AR3  : ");
-        strcat(s, config.disable_ar3 ? "disabled" : "enabled ");
-        OsdWrite(6, s, menusub == 4,config.memory&0x20);	// Grey out AR3 if more than 2MB fast memory
-#endif
+		// Make apearance of Action Replay option dependent upon Platform config.
+		if(PLATFORM&(1<<PLATFORM_ACTIONREPLAY))
+		{
+	        strcpy(s, "      AR3  : ");
+	        strcat(s, config.disable_ar3 ? "disabled" : "enabled ");
+	        OsdWrite(6, s, menusub == 5,config.memory&0x20);	// Grey out AR3 if more than 2MB fast memory
+		}
+		else
+		{
+	        OsdWrite(6, "", 0,0);
+			menumask&=0xdf;	// Remove bit 5
+		}
 
-        OsdWrite(7, STD_EXIT, menusub == 5,0);
+        OsdWrite(7, STD_BACK, menusub == 6,0);
 
         menustate = MENU_SETTINGS_MEMORY2;
         break;
@@ -1225,19 +1182,26 @@ void HandleUI(void)
             }
             else if (menusub == 2)
             {
-                config.memory = ((config.memory + 0x10) & 0x30) | (config.memory & ~0x30);
+				// Fast RAM config values 0 through 4 are valid, bit 7 is Turbo ChipRAM.
+                config.fastram = ((config.fastram + 0x1) % 0x5) | (config.fastram & ~0x7);
 //                if ((config.memory & 0x30) == 0x30)
 //					config.memory -= 0x30;
 //				if (!(config.disable_ar3 & 0x01)&&(config.memory & 0x20))
 //                    config.memory &= ~0x30;
                 menustate = MENU_SETTINGS_MEMORY1;
-                ConfigMemory(config.memory);
+                ConfigFastRAM(config.fastram);
             }
             else if (menusub == 3)
             {
-                SelectFile("ROM", SCAN_LFN, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1);
+				config.fastram^=0x80;
+                menustate = MENU_SETTINGS_MEMORY1;
+                ConfigFastRAM(config.fastram);
             }
             else if (menusub == 4)
+            {
+                SelectFile("ROM", SCAN_LFN, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1);
+            }
+            else if (menusub == 5)
             {
 		    if (!(config.disable_ar3 & 0x01)||(config.memory & 0x20))
                     config.disable_ar3 |= 0x01;
@@ -1245,7 +1209,7 @@ void HandleUI(void)
                     config.disable_ar3 &= 0xFE;
                 menustate = MENU_SETTINGS_MEMORY1;
             }
-            else if (menusub == 5)
+            else if (menusub == 6)
             {
                 menustate = MENU_MAIN2_1;
                 menusub = 3;
@@ -1374,6 +1338,7 @@ void HandleUI(void)
 		// Make the menu work on the copy, not the original, and copy on acceptance,
 		// not on rejection.
     case MENU_SETTINGS_HARDFILE1 :
+        OsdColor(OSDCOLOR_SUBMENU);
 		helptext=helptexts[HELPTEXT_HARDFILE];
 		OsdSetTitle("Harddisks",0);
 
@@ -1432,7 +1397,7 @@ void HandleUI(void)
         OsdWrite(5, s, enable ? (menusub == 4) : 0 ,enable==0);
 
         OsdWrite(6, "", 0,0);
-        OsdWrite(7, STD_EXIT, menusub == 5,0);
+        OsdWrite(7, STD_BACK, menusub == 5,0);
 
         menustate = MENU_SETTINGS_HARDFILE2;
 
@@ -1575,7 +1540,7 @@ void HandleUI(void)
 
      // check if hardfile configuration has changed
     case MENU_HARDFILE_EXIT :
-
+		// FIXME - check enabled bit here too.
          if (memcmp(config.hardfile, t_hardfile, sizeof(t_hardfile)) != 0)
          {
              menustate = MENU_HARDFILE_CHANGED1;
@@ -1591,6 +1556,7 @@ void HandleUI(void)
 
     // hardfile configuration has changed, ask user if he wants to use the new settings
     case MENU_HARDFILE_CHANGED1 :
+        OsdColor(OSDCOLOR_WARNING);
 		menumask=0x03;
 		parentstate=menustate;
  		OsdSetTitle("Confirm",0);
@@ -1702,7 +1668,8 @@ void HandleUI(void)
         /* video settings menu                                            */
         /******************************************************************/
     case MENU_SETTINGS_VIDEO1 :
-		menumask=0x0f;
+        OsdColor(OSDCOLOR_SUBMENU);
+		menumask=0x1f;
 		parentstate=menustate;
 		helptext=helptexts[HELPTEXT_VIDEO];
  
@@ -1714,13 +1681,15 @@ void HandleUI(void)
         strcpy(s, "   Hires Filter : ");
         strcat(s, config_filter_msg[config.filter.hires & 0x03]);
         OsdWrite(2, s, menusub == 1,0);
-        strcpy(s, "   Scanlines    : ");
-        strcat(s, config_scanlines_msg[config.scanlines % 3]);
-        OsdWrite(3, s, menusub == 2,0);
-        OsdWrite(4, "", 0,0);
-        OsdWrite(5, "", 0,0);
+        OsdWrite(3, "   Scanlines",0,0);
+        strcpy(s, "     Normal     : ");
+        strcat(s, config_scanlines_msg[config.scanlines & 3]);
+        OsdWrite(4, s, menusub == 2,0);
+        strcpy(s, "     Interlaced : ");
+        strcat(s, config_scanlines_msg[(config.scanlines & 0xc)>>2]);
+        OsdWrite(5, s, menusub == 3,0);
         OsdWrite(6, "", 0,0);
-        OsdWrite(7, STD_EXIT, menusub == 3,0);
+        OsdWrite(7, STD_BACK, menusub == 4,0);
 
         menustate = MENU_SETTINGS_VIDEO2;
         break;
@@ -1744,14 +1713,24 @@ void HandleUI(void)
             }
             else if (menusub == 2)
             {
-                config.scanlines++;
-                if (config.scanlines > 2)
-                    config.scanlines = 0;
+				short tmp=config.scanlines+1;
+				if((tmp&3)==3)
+					tmp=0;
+                config.scanlines=(config.scanlines&0xfc)|(tmp&3);
+                menustate = MENU_SETTINGS_VIDEO1;
+                ConfigScanlines(config.scanlines);
+            }
+            else if (menusub == 3)
+            {
+ 				short tmp=config.scanlines+4;
+				if((tmp&0xc)==0xc)
+					tmp=0;
+                config.scanlines=(config.scanlines&0xf3)|(tmp&0xc);
                 menustate = MENU_SETTINGS_VIDEO1;
                 ConfigScanlines(config.scanlines);
             }
 
-            else if (menusub == 3)
+            else if (menusub == 4)
             {
                 menustate = MENU_MAIN2_1;
                 menusub = 4;
@@ -1785,6 +1764,7 @@ void HandleUI(void)
          // no break intended
 
     case MENU_ROMFILE_SELECTED1 :
+        OsdColor(OSDCOLOR_WARNING);
 		menumask=0x03;
 		parentstate=menustate;
  		OsdSetTitle("Confirm",0);
@@ -2440,7 +2420,8 @@ void ErrorMessage(char *message, unsigned char code)
 	    OsdWrite(6, "", 0,0);
 	    OsdWrite(7, "", 0,0);
 
-        OsdEnable(0); // do not disable KEYBOARD
+		OsdEnable(0);
+        OsdColor(OSDCOLOR_WARNING); // do not disable KEYBOARD
     }
 }
 
@@ -2452,6 +2433,7 @@ void InfoMessage(char *message)
 //        OsdClear();
  		OsdSetTitle("Message",0);
         OsdEnable(0); // do not disable keyboard
+		OsdEnable(OSDCOLOR_TOPLEVEL);
     }
     OsdWrite(0, "", 0,0);
     OsdWrite(1, message, 0,0);

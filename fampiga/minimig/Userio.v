@@ -96,13 +96,14 @@ module userio
 	input	sck,	  				// SPI clock
 	output	osd_blank,				// osd overlay, normal video blank output
 	output	osd_pixel,				// osd video pixel
+	output	[5:0] osd_color,
 	output	osd_enable,
 	output	[1:0] lr_filter,
 	output	[1:0] hr_filter,
-	output	[5:0] memory_config,
+	output	[3:0] memory_config,
 	output	[3:0] chipset_config,
 	output	[3:0] floppy_config,
-	output	[1:0] scanline,
+	output	[3:0] scanline,
 	output	[2:0] ide_config,
 	output	[1:0] cpu_config,
 	output	usrrst,					// user reset from osd module
@@ -127,8 +128,8 @@ reg		joy1enable;					// joystick 1 enable (mouse/joy switch)
 reg		joy2enable;					// joystick 2 enable when no osd
 //wire	osd_enable;					// OSD display enable
 wire	key_disable;				// Amiga keyboard disable
-//reg		[7:0] t_osd_ctrl;			// JB: osd control lines
-wire		[7:0] t_osd_ctrl;			// JB: osd control lines
+reg		[7:0] t_osd_ctrl;			// JB: osd control lines
+//wire		[7:0] t_osd_ctrl;			// JB: osd control lines
 wire	test_load;					// load test value to mouse counter 
 wire	[15:0] test_data;			// mouse counter test value
 wire	[1:0] autofire_config;
@@ -202,28 +203,33 @@ always @(posedge clk)
 //	autofire is permanent active if enabled, can be overwritten any time by normal fire button
 assign _sjoy2[5:0] = joy2enable ? {_xjoy2[5], sel_autofire ^ _xjoy2[4], _xjoy2[3:0]} : 6'b11_1111;
 
-//always @(joy2enable or _xjoy2 or osd_ctrl)
-//	if (~joy2enable)
+// Joystick-in-OSD mapping - why was this disabled?  -- AMR
+// (presumably because of the absurdly high speed which which the menu responds!)
+
+always @(joy2enable or _xjoy2 or osd_ctrl)
+	if (~joy2enable)
 //		if (~_xjoy2[5] || (~_xjoy2[3] && ~_xjoy2[2]))
 //			t_osd_ctrl = KEY_MENU;
+		if (~_xjoy2[4])
+			t_osd_ctrl = KEY_ENTER;
 //		else if (~_xjoy2[4])
 //			t_osd_ctrl = KEY_ENTER;
-//		else if (~_xjoy2[3])
-//			t_osd_ctrl = KEY_UP;
-//		else if (~_xjoy2[2])
-//			t_osd_ctrl = KEY_DOWN;
-//		else if (~_xjoy2[1])
-//			t_osd_ctrl = KEY_LEFT;
-//		else if (~_xjoy2[0])
-//			t_osd_ctrl = KEY_RIGHT;
-//		else
-//			t_osd_ctrl = osd_ctrl;
-//	else
+		else if (~_xjoy2[3])
+			t_osd_ctrl = KEY_UP;
+		else if (~_xjoy2[2])
+			t_osd_ctrl = KEY_DOWN;
+		else if (~_xjoy2[1])
+			t_osd_ctrl = KEY_LEFT;
+		else if (~_xjoy2[0])
+			t_osd_ctrl = KEY_RIGHT;
+		else
+			t_osd_ctrl = osd_ctrl;
+	else
 //		if (~_xjoy2[3] && ~_xjoy2[2])
 //			t_osd_ctrl = KEY_MENU;
 //		else
-//			t_osd_ctrl = osd_ctrl;
-assign	t_osd_ctrl = osd_ctrl;
+			t_osd_ctrl = osd_ctrl;
+// assign	t_osd_ctrl = osd_ctrl;
 
 // port 1 automatic mouse/joystick switch
 always @(posedge clk)
@@ -342,6 +348,7 @@ osd	osd1
 	.sck(sck),
 	.osd_blank(osd_blank),
 	.osd_pixel(osd_pixel),
+	.osd_color(osd_color),
 	.osd_enable(osd_enable),
 	.key_disable(key_disable),
 	.lr_filter(lr_filter),
@@ -385,6 +392,7 @@ module osd
 	input	sck,	  						// SPI clock
 	output	osd_blank,						// osd overlay, normal video blank output
 	output	osd_pixel,						// osd video pixel
+	output	reg [5:0] osd_color,	// RrGgBb color for OSD window.
 	output	reg osd_enable = 0,				// osd enable
 	output	reg key_disable = 0,			// keyboard disable
 	output	reg [1:0] lr_filter = 0,
@@ -392,13 +400,13 @@ module osd
 	output	reg [5:0] memory_config = 0,
 	output	reg [3:0] chipset_config = 0,
 	output	reg [3:0] floppy_config = 0,
-	output	reg [1:0] scanline = 0,
+	output	reg [3:0] scanline = 0,
 	output	reg	[2:0] ide_config = 0,		// enable hard disk support
 	output	reg [1:0] cpu_config = 0,
 	output	reg [1:0] autofire_config = 0,
 	output	usrrst,
 	output	bootrst,
-	output	reconfigure
+	output	reg reconfigure
 );
 
 // local signals
@@ -420,8 +428,6 @@ reg 	[5:0] t_memory_config = 0;
 reg		[2:0] t_ide_config = 0;
 reg		[1:0] t_cpu_config = 0;
 reg 	[3:0] t_chipset_config = 0;
-
-reg		reconfig_reg;
 
 //--------------------------------------------------------------------------------------
 // memory configuration select signal
@@ -547,6 +553,7 @@ spi8 spi0
 // 8'b00000000 	NOP
 // 8'b001H0NNN 	write data to osd buffer line <NNN> (H - highlight)
 // 8'b0100--KE	enable OSD display (E) and disable Amiga keyboard (K)
+// 8'b011RrGgB AMR extension, RrGgB OSD background colour.
 // 8'b1000000B	reset Minimig (B - reset to bootloader)
 // 8'b10000010 reconfigure FPGA (reset to chameleon core)
 // 8'b100001AA	set autofire rate
@@ -569,7 +576,7 @@ always @(posedge clk)
 // scanline mode
 always @(posedge clk)
 	if (rx && cmd && wrdat[7:4]==4'b1010)
-		scanline <= wrdat[1:0];
+		scanline <= wrdat[3:0];
 		
 // hdd config
 always @(posedge clk)
@@ -627,10 +634,14 @@ always @(posedge clk)
 		highlight <= wrdat[3:0];
 		
 // disable/enable osd display
-// memory configuration
 always @(posedge clk)
-	if (rx && cmd && wrdat[7:4]==4'b0100)
-		{key_disable, osd_enable} <= wrdat[1:0];
+begin
+//	if (rx && cmd && wrdat[7:4]==4'b0100)
+	if (rx && cmd && wrdat[7:5]==3'b010)
+		{key_disable, osd_enable} <= wrdat[1:0];	
+	if (rx && cmd && wrdat[7:5]==3'b011)	// AMR
+		osd_color <= {wrdat[4:0],1'b0};	// OSD colour in RrGgBb format.  (b is always 0)
+end
 
 assign wren = rx && ~cmd && wrcmd ? 1'b1 : 1'b0;
 
@@ -642,12 +653,11 @@ assign bootrst = rx && cmd && wrdat[7:0]==8'b1000_0001 ? 1'b1 : 1'b0;
 
 // reconfigure chameleon
 always @(posedge clk)
+begin
+	reconfigure<=1'b0;
 	if(rx && cmd && wrdat[7:0]==8'b1000_0010)
-	  reconfig_reg<=1;
-	else if(reset)
-	  reconfig_reg<=0;
-
-assign reconfigure = reconfig_reg;
+	  reconfigure<=1'b1;
+end
 	  
 endmodule
 

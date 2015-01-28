@@ -36,7 +36,7 @@ This is the Minimig OSD (on-screen-display) handler.
 //#include "AT91SAM7S256.h"
 #include "osd.h"
 #include "hardware.h"
-//#include "stdio.h"
+#include "stdio.h"
 
 #include "charrom.h"
 #include "logo.h"
@@ -647,7 +647,15 @@ void OsdWaitVBL(void)
 void OsdEnable(unsigned char mode)
 {
     EnableOsd();
-    SPI(OSDCMDENABLE | (mode & DISABLE_KEYBOARD));
+    SPI(OSDCMDENABLE | (mode & OSDENABLEPARAMBITS));
+    DisableOsd();
+}
+
+// Set OSD background color.
+void OsdColor(unsigned char color)
+{
+    EnableOsd();
+    SPI(OSDCMDCOLOR | (color & OSDCOLORBITS));
     DisableOsd();
 }
 
@@ -666,12 +674,13 @@ void OsdReset(unsigned char boot)
     DisableOsd();
 }
 
-void OsdReconfig()
-{
-	EnableOsd();
-	SPI(OSDCMDRECONFIG);
-	DisableOsd();
-}
+//void OsdReconfig()
+//{
+//	EnableOsd();
+//	SPI(OSDCMDRECONFIG);
+//	DisableOsd();
+//}
+
 
 void ConfigFilter(unsigned char lores, unsigned char hires)
 {
@@ -679,6 +688,7 @@ void ConfigFilter(unsigned char lores, unsigned char hires)
     SPI(OSDCMDCFGFLT | ((hires & 0x03) << 2) | (lores & 0x03));
     DisableOsd();
 }
+
 
 void ConfigMemory(unsigned char memory)
 {
@@ -689,6 +699,7 @@ void ConfigMemory(unsigned char memory)
     SPI(OSDCMDCFGMEM | 0x04 | ((memory>>2) & 0x03));	//slow
     DisableOsd();
     EnableOsd();
+	// FIXME - certain options are platform-specific and don't involve the core.  Need a new hardware register for these.
     SPI(OSDCMDCFGMEM | 0x08 | ((memory>>4) & 0x03));	//fast
     DisableOsd();
     EnableOsd();
@@ -752,6 +763,9 @@ unsigned char OsdGetCtrl(void)
     EnableOsd();
     c1 = SPI(OSDCMDREAD);
     DisableOsd();
+
+	if(c1!=c2)
+		printf("Got OSD ctrl code %02x\n",c1);
 
     // add front menu button
     if (!CheckButton())

@@ -204,3 +204,17 @@ void WaitTimer(unsigned long time)
     while (!CheckTimer(time));
 }
 
+void ConfigFastRAM(unsigned char memory)
+{
+	short mem=((memory&0x80)<<8)|(memory&0x07); // Map bit 8 to bit 16 (turbo chip)
+	if(mem & 0x04)
+		mem |=0x3;	// Map 0x4 -> 0x7
+	PLATFORM=mem;
+}
+
+
+void Reconfigure()
+{
+	RECONFIGURE=0;	// A write to this register triggers a reconfig
+}
+
